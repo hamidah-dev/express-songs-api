@@ -1,11 +1,11 @@
-const Joi = require('joi');
+
+const Joi = require('joi')
 const express = require('express');
 const router = express.Router();
 
 let songs = [];
 const DELAY = 10
 
-//Integrate below methods in the route handlers with async and await
 const getSongs = () => {
     return new Promise((resolve, reject) => {
         setTimeout(() => {
@@ -66,65 +66,84 @@ const deleteSong = (songToDelete) => {
 }
 
 //Song API
-router.param('id', (req, res, next, id) => {
-    let song = songs.find(song => song.id === parseInt(id));
-    if(!song){
-        const error = new Error(`Unable to find song with id: ${id}`);
-        error.statusCode = 404;
-        return next(error)
+router.param('id', async (req, res, next, id) => {
+    try{
+        req.song = await getSong(id);
+        next();
     }
-    req.song = song;
-    next();
+    catch(error){
+        error.statusCode = 404;
+        next(error);
+    }
 });
 
 //return list of all songs
-router.get('/', (req, res, next) => {
-    res.status(200).json(songs);
-});
-
-//create a new song, and return new song
-router.post('/', (req, res, next) => {
-    const validation = validateSong(req.body)
-    if(validation.error) {
-        let error = new Error(validation.error.details[0].message)
-        error.statusCode = 400
-        return next(error); 
-    } 
-    
-    let newSong = {
-        id: songs.length + 1,
-        name: req.body.name,
-        artist: req.body.artist 
+router.get('/', async (req, res, next) => {
+    try{
+        let allsongs = await getSongs();
+        res.status(200).json(songs);
     }
-    songs.push(newSong);
-    res.status(201).json(newSong);
+    catch(error){
+        res.status(404).json({message: "unable to list all songs"})
+    }
 });
+  
+router.post('/', async (req, res, next) => {
+    try{
+        const validation = validateSong(req.body)
+        if(validation.error) {
+            let error = new Error(validation.error.details[0].message)
+            error.statusCode = 400;
+            return next(error); 
+        } 
+
+        newSong = await createSong(req.body);
+        res.status(201).json(newSong);
+    }
+    catch(error){
+        error.statusCode = 404
+        return next(error);
+    }
+  });
 
 //return a song with id 
 router.get('/:id', (req, res, next) => {
-    res.status(200).json(req.song);
+    try {
+        res.status(200).json(req.song);
+    }
+    catch(error){
+        next(error);
+    }
 });
 
-//update a song with id, and return edited song
-router.put('/:id', (req, res, next) => {
-    const validation = validateSong(req.body)
-    if (validation.error){
-        let error = new Error(validation.error.details[0].message)
-        error.statusCode = 400
-        return next(error);
-    }
+//edit a song with id, and return edited song
+router.put('/:id', async (req, res, next) => {
+    try{
+        const validation = validateSong(req.body);
+        if(validation.error) {
+            let error = new Error(validation.error.details[0].message);
+            error.statusCode = 400;
+            return next(error); 
+        } 
 
-    req.song.name = req.body.name;
-    req.song.artist = req.body.artist;
-    res.status(200).json(req.song);
+        let song = await updateSong(req.body, req.song);
+        res.status(200).json(song);
+    }
+    catch(error){
+        error.statusCode = 404;
+        next(error);
+    }
 });
 
 //delete a song with id, and return deleted song
-router.delete("/:id", (req, res, next) => {
-
-    let index = songs.indexOf(req.song);
-    songs.splice(index, 1);
-    res.status(200).json(req.song);
+router.delete("/:id", async (req, res, next) => {
+    try{
+        let songDeleted = await deleteSong(req.song)
+        res.status(200).json(songDeleted);
+    }
+    catch(error){
+        res.status(404).json({message: `Unable to delete song with id: ${req.params.id}` })
+    }
 });
 
 //Add error handler for songs router to return error on failure at any route
